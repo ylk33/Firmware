@@ -73,6 +73,11 @@ private:
 
 	static constexpr int MAX_SENSOR_COUNT = 3;
 
+	int FindCalibrationIndex(uint32_t device_id) const;
+
+	matrix::Vector3f CalibrationOffset(uint8_t calibration_index) const;
+	matrix::Vector3f CalibrationScale(uint8_t calibration_index) const;
+
 	const char *SensorString() const;
 
 	uORB::Subscription _sensor_correction_sub{ORB_ID(sensor_correction)};
@@ -85,7 +90,11 @@ private:
 	uint32_t _device_id{0};
 	int8_t _corrections_selected_instance{-1};
 
+	int8_t _calibration_index{-1};
+
 	const SensorType _type;
+
+	bool _temperature_calibration{false};
 
 	DEFINE_PARAMETERS(
 		(ParamInt<px4::params::SENS_BOARD_ROT>) _param_sens_board_rot,

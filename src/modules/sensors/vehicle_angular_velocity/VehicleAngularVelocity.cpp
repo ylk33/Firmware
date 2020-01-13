@@ -303,15 +303,15 @@ void VehicleAngularVelocity::PrintStatus()
 {
 	PX4_INFO("selected sensor: %d (%d)", _selected_sensor_device_id, _selected_sensor_sub_index);
 	PX4_INFO("bias: [%.3f %.3f %.3f]", (double)_bias(0), (double)_bias(1), (double)_bias(2));
-	_corrections.PrintStatus();
 
 	PX4_INFO("sample rate: %.3f Hz", (double)_update_rate_hz);
-	PX4_INFO("low-pass filter cutoff: %.3f Hz", (double)_lp_filter_velocity.get_cutoff_freq());
 
 	if (_notch_filter_velocity.getNotchFreq() > 0.0f) {
 		PX4_INFO("notch filter freq: %.3f Hz\tbandwidth: %.3f Hz", (double)_notch_filter_velocity.getNotchFreq(),
 			 (double)_notch_filter_velocity.getBandwidth());
 	}
+
+	_corrections.PrintStatus();
 }
 
 } // namespace sensors

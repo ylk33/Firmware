@@ -39,6 +39,8 @@
 
 #include "LPS22HB.hpp"
 
+#include <lib/drivers/device/i2c.h>
+
 #define LPS22HB_ADDRESS		0x5D
 
 device::Device *LPS22HB_I2C_interface(int bus);
@@ -57,8 +59,7 @@ protected:
 
 };
 
-device::Device *
-LPS22HB_I2C_interface(int bus)
+device::Device *LPS22HB_I2C_interface(int bus)
 {
 	return new LPS22HB_I2C(bus);
 }
@@ -68,8 +69,7 @@ LPS22HB_I2C::LPS22HB_I2C(int bus) :
 {
 }
 
-int
-LPS22HB_I2C::probe()
+int LPS22HB_I2C::probe()
 {
 	uint8_t id;
 
@@ -90,8 +90,7 @@ LPS22HB_I2C::probe()
 	return OK;
 }
 
-int
-LPS22HB_I2C::write(unsigned address, void *data, unsigned count)
+int LPS22HB_I2C::write(unsigned address, void *data, unsigned count)
 {
 	uint8_t buf[32];
 
@@ -105,8 +104,7 @@ LPS22HB_I2C::write(unsigned address, void *data, unsigned count)
 	return transfer(&buf[0], count + 1, nullptr, 0);
 }
 
-int
-LPS22HB_I2C::read(unsigned address, void *data, unsigned count)
+int LPS22HB_I2C::read(unsigned address, void *data, unsigned count)
 {
 	uint8_t cmd = address;
 	return transfer(&cmd, 1, (uint8_t *)data, count);

@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2016 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2016-2020 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,12 +30,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  ****************************************************************************/
-
-/**
- * @file lps25h.cpp
- *
- * Driver for the LPS25H barometer connected via I2C or SPI.
- */
 
 #pragma once
 
@@ -179,6 +173,6 @@ private:
 	unsigned		_measure_interval{0};
 	bool			_collect_phase{false};
 
-	perf_counter_t		_sample_perf;
-	perf_counter_t		_comms_errors;
+	perf_counter_t		_sample_perf{perf_alloc(PC_ELAPSED, MODULE_NAME": read")};
+	perf_counter_t		_comms_errors{perf_alloc(PC_COUNT, MODULE_NAME": comms errors")};
 };

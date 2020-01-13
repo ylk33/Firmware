@@ -59,8 +59,7 @@ public:
 
 };
 
-device::Device *
-LPS22HB_SPI_interface(int bus)
+device::Device *LPS22HB_SPI_interface(int bus)
 {
 	return new LPS22HB_SPI(bus, PX4_SPIDEV_LPS22HB);
 }
@@ -70,8 +69,7 @@ LPS22HB_SPI::LPS22HB_SPI(int bus, uint32_t device) : SPI("LPS22HB_SPI", nullptr,
 	_device_id.devid_s.devtype = DRV_BARO_DEVTYPE_LPS22HB;
 }
 
-int
-LPS22HB_SPI::init()
+int LPS22HB_SPI::init()
 {
 	int ret = SPI::init();
 
@@ -96,8 +94,7 @@ LPS22HB_SPI::init()
 	return OK;
 }
 
-int
-LPS22HB_SPI::write(unsigned address, void *data, unsigned count)
+int LPS22HB_SPI::write(unsigned address, void *data, unsigned count)
 {
 	uint8_t buf[32];
 
@@ -111,8 +108,7 @@ LPS22HB_SPI::write(unsigned address, void *data, unsigned count)
 	return transfer(&buf[0], &buf[0], count + 1);
 }
 
-int
-LPS22HB_SPI::read(unsigned address, void *data, unsigned count)
+int LPS22HB_SPI::read(unsigned address, void *data, unsigned count)
 {
 	uint8_t buf[32];
 

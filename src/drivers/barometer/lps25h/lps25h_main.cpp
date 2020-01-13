@@ -214,13 +214,13 @@ extern "C" int lps25h_main(int argc, char *argv[])
 	const char *verb = argv[myoptind];
 
 	if (!strcmp(verb, "start")) {
-		lps25h::start(busid);
+		return lps25h::start(busid);
 
 	} else if (!strcmp(verb, "stop")) {
 		return lps25h::stop(busid);
 
 	} else if (!strcmp(verb, "status")) {
-		lps25h::status(busid);
+		return lps25h::status(busid);
 	}
 
 	return lps25h::usage();

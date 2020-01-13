@@ -36,9 +36,7 @@
 LPS25H::LPS25H(device::Device *interface) :
 	ScheduledWorkItem(MODULE_NAME, px4::device_bus_to_wq(interface->get_device_id())),
 	_px4_barometer(interface->get_device_id()),
-	_interface(interface),
-	_sample_perf(perf_alloc(PC_ELAPSED, MODULE_NAME": read")),
-	_comms_errors(perf_alloc(PC_COUNT, MODULE_NAME": comms_errors"))
+	_interface(interface)
 {
 	_interface->set_device_type(DRV_BARO_DEVTYPE_LPS25H);
 	_px4_barometer.set_device_type(DRV_BARO_DEVTYPE_LPS25H);
@@ -115,7 +113,7 @@ void LPS25H::Run()
 		/*
 		 * Is there a collect->measure gap?
 		 */
-		if (_measure_interval > (LPS25H_CONVERSION_INTERVAL)) {
+		if (_measure_interval > LPS25H_CONVERSION_INTERVAL) {
 			/* schedule a fresh cycle call when we are ready to measure again */
 			ScheduleDelayed(_measure_interval - LPS25H_CONVERSION_INTERVAL);
 
@@ -137,9 +135,7 @@ void LPS25H::Run()
 
 int LPS25H::measure()
 {
-	/*
-	 * Send the command to begin a 16-bit measurement.
-	 */
+	// Send the command to begin a 16-bit measurement.
 	int ret = write_reg(ADDR_CTRL_REG2, CTRL_REG2_ONE_SHOT);
 
 	if (OK != ret) {
@@ -161,7 +157,7 @@ int LPS25H::collect()
 		int16_t		t;
 	} report{};
 
-	/* get measurements from the device : MSB enables register address auto-increment */
+	// get measurements from the device : MSB enables register address auto-increment
 	const hrt_abstime timestamp_sample = hrt_absolute_time();
 	int ret = _interface->read(ADDR_STATUS_REG | (1 << 7), (uint8_t *)&report, sizeof(report));
 

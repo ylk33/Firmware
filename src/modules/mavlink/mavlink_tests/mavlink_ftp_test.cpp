@@ -43,16 +43,21 @@
 #include "../mavlink_ftp.h"
 
 #ifdef __PX4_NUTTX
-#define PX4_MAVLINK_TEST_DATA_DIR "/etc"
+#define PX4_MAVLINK_TEST_DATA_DIR "/fs/microsd/ftp_unit_test_data"
 #else
-#define PX4_MAVLINK_TEST_DATA_DIR "etc"
+#define PX4_MAVLINK_TEST_DATA_DIR "ftp_unit_test_data"
 #endif
 
-/// @brief Test case file name for Read command. File are generated using mavlink_ftp_test_data.py
+static const char *_test_files[] = {
+	PX4_MAVLINK_TEST_DATA_DIR  "/" "test_238.data",
+	PX4_MAVLINK_TEST_DATA_DIR  "/" "test_239.data",
+	PX4_MAVLINK_TEST_DATA_DIR  "/" "test_240.data"
+};
+
 const MavlinkFtpTest::DownloadTestCase MavlinkFtpTest::_rgDownloadTestCases[] = {
-	{ PX4_MAVLINK_TEST_DATA_DIR  "/unit_test_data/mavlink_tests/test_238.data",	MAVLINK_MSG_FILE_TRANSFER_PROTOCOL_FIELD_PAYLOAD_LEN - sizeof(MavlinkFTP::PayloadHeader) - 1,	true, false },	// Read takes less than single packet
-	{ PX4_MAVLINK_TEST_DATA_DIR  "/unit_test_data/mavlink_tests/test_239.data",	MAVLINK_MSG_FILE_TRANSFER_PROTOCOL_FIELD_PAYLOAD_LEN - sizeof(MavlinkFTP::PayloadHeader),	true, true },	// Read completely fills single packet
-	{ PX4_MAVLINK_TEST_DATA_DIR  "/unit_test_data/mavlink_tests/test_240.data",	MAVLINK_MSG_FILE_TRANSFER_PROTOCOL_FIELD_PAYLOAD_LEN - sizeof(MavlinkFTP::PayloadHeader) + 1,	false, false },	// Read take two packets
+	{ _test_files[0], MAVLINK_MSG_FILE_TRANSFER_PROTOCOL_FIELD_PAYLOAD_LEN - sizeof(MavlinkFTP::PayloadHeader) - 1,	true, false },	// Read takes less than single packet
+	{ _test_files[1], MAVLINK_MSG_FILE_TRANSFER_PROTOCOL_FIELD_PAYLOAD_LEN - sizeof(MavlinkFTP::PayloadHeader),	true, true },	// Read completely fills single packet
+	{ _test_files[2], MAVLINK_MSG_FILE_TRANSFER_PROTOCOL_FIELD_PAYLOAD_LEN - sizeof(MavlinkFTP::PayloadHeader) + 1,	false, false },	// Read take two packets
 };
 
 const char MavlinkFtpTest::_unittest_microsd_dir[] = PX4_STORAGEDIR "/ftp_unit_test_dir";
@@ -72,7 +77,46 @@ void MavlinkFtpTest::_init()
 	_ftp_server = new MavlinkFTP(nullptr);
 	_ftp_server->set_unittest_worker(MavlinkFtpTest::receive_message_handler_generic, this);
 
+	_create_test_files();
+
 	_cleanup_microsd();
+}
+
+bool MavlinkFtpTest::_create_test_files()
+{
+	int ret = ::mkdir(PX4_MAVLINK_TEST_DATA_DIR, S_IRWXU | S_IRWXG | S_IRWXO);
+	ut_assert("mkdir failed", ret == 0 || errno == EEXIST);
+
+	ret = ::mkdir(PX4_MAVLINK_TEST_DATA_DIR "/empty_dir", S_IRWXU | S_IRWXG | S_IRWXO);
+	ut_assert("mkdir failed", ret == 0 || errno == EEXIST);
+
+	bool failed = false;
+
+	for (int i = 0; i < 3; ++i) {
+		int fd = ::open(_test_files[i], O_CREAT | O_EXCL | O_WRONLY, S_IRWXU | S_IRWXG | S_IRWXO);
+
+		if (fd < 0) {
+			printf("fd: %d, error: %s\n", fd, strerror(errno));
+			ut_assert("Open failed", fd != -1);
+		}
+
+		// We create 3 files, with bytes counting from 0 to 238, 239, and 240.
+		uint8_t len = 238 + i;
+
+		for (uint8_t c = 0; c < len; ++c) {
+			ret = ::write(fd, &c, 1);
+
+			if (ret != 1) {
+				failed = true;
+			}
+		}
+
+		close(fd);
+	}
+
+	ut_assert("Could not write test file", !failed);
+
+	return !failed;
 }
 
 /// @brief Called after every test to take down the FTP Server.
@@ -81,7 +125,21 @@ void MavlinkFtpTest::_cleanup()
 	delete _ftp_server;
 
 	_cleanup_microsd();
+	_remove_test_files();
 }
+
+bool MavlinkFtpTest::_remove_test_files()
+{
+	for (int i = 0; i < 3; ++i) {
+		::unlink(_test_files[i]);
+	}
+
+	::rmdir(PX4_MAVLINK_TEST_DATA_DIR "/empty_dir");
+	::rmdir(PX4_MAVLINK_TEST_DATA_DIR);
+
+	return true;
+}
+
 
 /// @brief Tests for correct behavior of an Ack response.
 bool MavlinkFtpTest::_ack_test()

@@ -45,6 +45,8 @@
 
 #include "mavlink_bridge_header.h"
 
+#define MAVLINK_FTP_DEBUG 1
+
 class MavlinkFtpTest;
 class Mavlink;
 

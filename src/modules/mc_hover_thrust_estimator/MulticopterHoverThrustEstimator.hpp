@@ -56,7 +56,6 @@
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/vehicle_local_position.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
-#include <uORB/topics/vehicle_status.h>
 
 #include "zero_order_hover_thrust_ekf.hpp"
 
@@ -96,13 +95,12 @@ private:
 
 	uORB::Subscription _parameter_update_sub{ORB_ID(parameter_update)};
 	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
-	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
 	uORB::Subscription _vehicle_local_pos_sub{ORB_ID(vehicle_local_position)};
 
 	hrt_abstime _timestamp_last{0};
 
-	bool _armed{false};
 	bool _landed{false};
+	bool _in_air{false};
 
 	perf_counter_t _cycle_perf{perf_alloc(PC_ELAPSED, MODULE_NAME": cycle time")};
 

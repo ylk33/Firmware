@@ -49,8 +49,8 @@ px4_add_board(
 		#pca9685
 		#protocol_splitter
 		#pwm_input
-		pwm_out_sim
-		px4flow
+		#pwm_out_sim
+		#px4flow
 		px4fmu
 		px4io
 		#roboclaw
@@ -65,13 +65,13 @@ px4_add_board(
 
 	MODULES
 		#attitude_estimator_q
-		camera_feedback
+		#camera_feedback
 		commander
 		dataman
 		ekf2
 		events
-		fw_att_control
-		fw_pos_control_l1
+		#fw_att_control
+		#fw_pos_control_l1
 		#gnd_att_control
 		#gnd_pos_control
 		land_detector
@@ -85,15 +85,16 @@ px4_add_board(
 		navigator
 		sensors
 		vmount
-		vtol_att_control
+		#vtol_att_control
 		#wind_estimator
+                send_position
 
 	SYSTEMCMDS
 		bl_update
 		#config
 		#dumpfile
 		#esc_calib
-		hardfault_log
+		#hardfault_log
 		#led_control
 		mixer
 		#motor_ramp
@@ -107,8 +108,8 @@ px4_add_board(
 		#sd_bench
 		#tests # tests and test runner
 		top
-		#topic_listener
-		tune_control
+		topic_listener
+		#tune_control
 		#usb_connected
 		ver
 

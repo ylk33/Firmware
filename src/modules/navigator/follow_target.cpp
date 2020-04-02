@@ -1,5 +1,8 @@
 /****************************************************************************
- *
+ *   仅采用外部速度数据，未改动位置前馈 
+ *   速度分40步跟踪
+ *   前馈适用范围：跟随点速度>0.5m/s，或距离(目标+offset)>2m
+ *   用于测试目标点静止后无人机会不会出现大范围扰动飞行、机头转向是否合理
  *   Copyright (c) 2013-2016 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,6 +54,7 @@
 #include <uORB/uORB.h>
 #include <uORB/topics/position_setpoint_triplet.h>
 #include <uORB/topics/follow_target.h>
+#include <uORB/topics/follow_dg.h>
 #include <lib/ecl/geo/geo.h>
 #include <lib/mathlib/math/Limits.hpp>
 
@@ -108,7 +112,7 @@ void FollowTarget::on_active()
 
 	orb_check(_follow_target_sub, &updated);
 
-	if (updated) {
+	if (updated) {                                                                                                                      //1. 滤波计算_current_target_motion 
 		follow_target_s target_motion;
 
 		_target_updates++;
@@ -128,47 +132,51 @@ void FollowTarget::on_active()
 						     1 - _responsiveness);
 		_current_target_motion.lon = (_current_target_motion.lon * (double)_responsiveness) + target_motion.lon * (double)(
 						     1 - _responsiveness);
+	    _current_target_motion.vx = target_motion.vx;
+		_current_target_motion.vy = target_motion.vy;
 
 	} else if (((current_time - _current_target_motion.timestamp) / 1000) > TARGET_TIMEOUT_MS && target_velocity_valid()) {
 		reset_target_validity();
 	}
 
-	// update distance to target
+	// update distance to target                                                                                                          2. 更新实时位置到目标位置的距离             
 
 	if (target_position_valid()) {
 
 		// get distance to target
 
-		map_projection_init(&target_ref, _navigator->get_global_position()->lat, _navigator->get_global_position()->lon);
-		map_projection_project(&target_ref, _current_target_motion.lat, _current_target_motion.lon, &_target_distance(0),
+		map_projection_init(&target_ref, _navigator->get_global_position()->lat, _navigator->get_global_position()->lon);//               2.1 将当前实时经纬度设为参考点                  
+		map_projection_project(&target_ref, _current_target_motion.lat, _current_target_motion.lon, &_target_distance(0),//               2.2 由参考点和目标点计算距目标点的x，y向距离
 				       &_target_distance(1));
 
 	}
 
-	// update target velocity
+	// update target velocity                                                                                                             3. 更新目标速度，主要计算速度应该的变化量
 
 	if (target_velocity_valid() && updated) {
 
 		dt_ms = ((_current_target_motion.timestamp - _previous_target_motion.timestamp) / 1000);
 
-		// ignore a small dt
+		// ignore a small dt  大于10ms才计算
 		if (dt_ms > 10.0F) {
-			// get last gps known reference for target
+			// get last gps known reference for target   上一目标点作为参考点
 			map_projection_init(&target_ref, _previous_target_motion.lat, _previous_target_motion.lon);
 
-			// calculate distance the target has moved
+			// calculate distance the target has moved   计算跟踪目标dt时间内移动的距离
 			map_projection_project(&target_ref, _current_target_motion.lat, _current_target_motion.lon,
 					       &(_target_position_delta(0)), &(_target_position_delta(1)));
 
-			// update the average velocity of the target based on the position
-			_est_target_vel = _target_position_delta / (dt_ms / 1000.0f);
-
-			// if the target is moving add an offset and rotation
+			// update the average velocity of the target based on the position   基于位置信息更新跟踪目标的平均速度
+			///////_est_target_vel = _target_position_delta / (dt_ms / 1000.0f);
+            _est_target_vel(0) = (_current_target_motion.vx * (float)_responsiveness) + _previous_target_motion.vx * (float)(1 - _responsiveness);
+			_est_target_vel(1) = (_current_target_motion.vy * (float)_responsiveness) + _previous_target_motion.vy * (float)(1 - _responsiveness);
+			
+			// if the target is moving add an offset and rotation   若跟踪目标在移动，添加跟踪距离和跟踪方位
 			if (_est_target_vel.length() > .5F) {
 				_target_position_offset = _rot_matrix * _est_target_vel.normalized() * _follow_offset;
 			}
 
-			// are we within the target acceptance radius?
+			// are we within the target acceptance radius?                                   判断是否在跟踪半径内 方圆5m
 			// give a buffer to exit/enter the radius to give the velocity controller
 			// a chance to catch up
 
@@ -182,15 +190,25 @@ void FollowTarget::on_active()
 			// velocity as the position gap increases since
 			// just traveling at the exact velocity of the target will not
 			// get any closer or farther from the target
+			//if(_est_target_vel.length() > 0.5F)
+			    //_step_vel = (_est_target_vel - _current_vel) + (_target_position_offset + _target_distance) * FF_K * math::min(_est_target_vel.length()-0.5f,1.0f) ;
+//            else
+ if((_target_position_offset + _target_distance).length() > 0.5F){
+                            float tmp = ((_target_position_offset + _target_distance).length() - 0.5f) / 3.0f;   
+                                  tmp = tmp*0.1f+0.9f*tmp*tmp*tmp*tmp;
+			    _step_vel = (_est_target_vel - _current_vel) + (_target_position_offset + _target_distance) * FF_K * 2.0f * math::min(tmp,1.5f);
 
-			_step_vel = (_est_target_vel - _current_vel) + (_target_position_offset + _target_distance) * FF_K;
-			_step_vel /= (dt_ms / 1000.0F * (float) INTERPOLATION_PNTS);
-			_step_time_in_ms = (dt_ms / (float) INTERPOLATION_PNTS);
+}
+		    else
+				_step_vel = (_est_target_vel - _current_vel);
+			///////_step_vel /= (dt_ms / 1000.0F * (float) INTERPOLATION_PNTS);  //分二十步跟踪，每一步的速度变化量
+			_step_vel /= ((float) INTERPOLATION_PNTS);
+			_step_time_in_ms = (dt_ms / (float) INTERPOLATION_PNTS);  //速度分步时间
 
 			// if we are less than 1 meter from the target don't worry about trying to yaw
 			// lock the yaw until we are at a distance that makes sense
 
-			if ((_target_distance).length() > 1.0F) {
+			if ((_target_distance).length() > 1.0F) {    //                                                                               设置航向角(距离目标点超过1米时)
 
 				// yaw rate smoothing
 
@@ -202,7 +220,9 @@ void FollowTarget::on_active()
 						_current_target_motion.lat,
 						_current_target_motion.lon);
 
-				_yaw_rate = wrap_pi((_yaw_angle - _navigator->get_global_position()->yaw) / (dt_ms / 1000.0f));
+				//wqk
+				_yaw_rate = wrap_pi(_yaw_angle - _navigator->get_global_position()->yaw) / (dt_ms / 1000.0f);
+                _yaw_rate = math::constrain(_yaw_rate,-3.0f,3.0f);
 
 			} else {
 				_yaw_angle = _yaw_rate = NAN;
@@ -224,7 +244,7 @@ void FollowTarget::on_active()
 
 	if (target_position_valid()) {
 
-		// get the target position using the calculated offset
+		// get the target position using the calculated offset                                                            5. 由当前目标位置和目标点运动趋势给出位置控制模块应该跟踪的最终给定位置
 
 		map_projection_init(&target_ref,  _current_target_motion.lat, _current_target_motion.lon);
 		map_projection_reproject(&target_ref, _target_position_offset(0), _target_position_offset(1),
@@ -233,13 +253,13 @@ void FollowTarget::on_active()
 
 	// clamp yaw rate smoothing if we are with in
 	// 3 degrees of facing target
-
+	/*
 	if (PX4_ISFINITE(_yaw_rate)) {
 		if (fabsf(fabsf(_yaw_angle) - fabsf(_navigator->get_global_position()->yaw)) < math::radians(3.0F)) {
 			_yaw_rate = NAN;
 		}
 	}
-
+	*/
 	// update state machine
 
 	switch (_follow_target_state) {
@@ -254,7 +274,7 @@ void FollowTarget::on_active()
 				// keep the current velocity updated with the target velocity for when it's needed
 				_current_vel = _est_target_vel;
 
-				update_position_sp(true, true, _yaw_rate);
+				update_position_sp(true, true, _yaw_rate, true);
 
 			} else {
 				_follow_target_state = SET_WAIT_FOR_TARGET_POSITION;
@@ -277,7 +297,7 @@ void FollowTarget::on_active()
 
 				set_follow_target_item(&_mission_item, _param_nav_min_ft_ht.get(), target_motion_with_offset, _yaw_angle);
 
-				update_position_sp(true, false, _yaw_rate);
+				update_position_sp(true, false, _yaw_rate, false);
 
 			} else {
 				_follow_target_state = SET_WAIT_FOR_TARGET_POSITION;
@@ -299,9 +319,9 @@ void FollowTarget::on_active()
 			target.lon = _navigator->get_global_position()->lon;
 			target.alt = 0.0F;
 
-			set_follow_target_item(&_mission_item, _param_nav_min_ft_ht.get(), target, _yaw_angle);
+			set_follow_target_item(&_mission_item, _param_nav_min_ft_ht.get(), target, NAN);
 
-			update_position_sp(false, false, _yaw_rate);
+			update_position_sp(false, false, NAN, false);
 
 			_follow_target_state = WAIT_FOR_TARGET_POSITION;
 		}
@@ -320,7 +340,7 @@ void FollowTarget::on_active()
 	}
 }
 
-void FollowTarget::update_position_sp(bool use_velocity, bool use_position, float yaw_rate)
+void FollowTarget::update_position_sp(bool use_velocity, bool use_position, float yaw_rate, bool track_p)
 {
 	// convert mission item to current setpoint
 
@@ -338,6 +358,7 @@ void FollowTarget::update_position_sp(bool use_velocity, bool use_position, floa
 	pos_sp_triplet->current.vx = _current_vel(0);
 	pos_sp_triplet->current.vy = _current_vel(1);
 	pos_sp_triplet->next.valid = false;
+	pos_sp_triplet->next.acceleration_valid = track_p;	
 	pos_sp_triplet->current.yawspeed_valid = PX4_ISFINITE(yaw_rate);
 	pos_sp_triplet->current.yawspeed = yaw_rate;
 	_navigator->set_position_setpoint_triplet_updated();
@@ -387,12 +408,13 @@ FollowTarget::set_follow_target_item(struct mission_item_s *item, float min_clea
 		item->lon = target.lon;
 		item->altitude = _navigator->get_home_position()->alt;
 
-		if (min_clearance > 8.0f) {
-			item->altitude += min_clearance;
+		 if (min_clearance > 8.0f) {
+			 item->altitude += min_clearance;
 
-		} else {
-			item->altitude += 8.0f; // if min clearance is bad set it to 8.0 meters (well above the average height of a person)
-		}
+		 } else {
+			 item->altitude += 8.0f; // if min clearance is bad set it to 8.0 meters (well above the average height of a person)
+		 }
+		
 	}
 
 	item->altitude_is_relative = false;

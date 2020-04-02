@@ -88,6 +88,7 @@ MulticopterLandDetector::MulticopterLandDetector()
 	_landed_hysteresis.set_hysteresis_time_from(false, LAND_DETECTOR_TRIGGER_TIME_US);
 	_maybe_landed_hysteresis.set_hysteresis_time_from(false, MAYBE_LAND_DETECTOR_TRIGGER_TIME_US);
 	_ground_contact_hysteresis.set_hysteresis_time_from(false, GROUND_CONTACT_TRIGGER_TIME_US);
+	_dg_ground_contact_hysteresis.set_hysteresis_time_from(false, DG_GROUND_CONTACT_TRIGGER_TIME_US);    //DG
 }
 
 void MulticopterLandDetector::_initialize_topics()
@@ -100,6 +101,8 @@ void MulticopterLandDetector::_initialize_topics()
 	_sensor_bias_sub = orb_subscribe(ORB_ID(sensor_bias));
 	_vehicle_control_mode_sub = orb_subscribe(ORB_ID(vehicle_control_mode));
 	_battery_sub = orb_subscribe(ORB_ID(battery_status));
+	_manual_sub=orb_subscribe(ORB_ID(manual_control_setpoint));//RC输入
+	_internal_state_sub=orb_subscribe(ORB_ID(commander_state));//遥控飞行模式
 }
 
 void MulticopterLandDetector::_update_topics()
@@ -111,6 +114,8 @@ void MulticopterLandDetector::_update_topics()
 	_orb_update(ORB_ID(sensor_bias), _sensor_bias_sub, &_sensors);
 	_orb_update(ORB_ID(vehicle_control_mode), _vehicle_control_mode_sub, &_control_mode);
 	_orb_update(ORB_ID(battery_status), _battery_sub, &_battery);
+	_orb_update(ORB_ID(manual_control_setpoint), _manual_sub, &_manual);//RC输入
+	_orb_update(ORB_ID(commander_state), _internal_state_sub, &_internal_state);//飞行模式
 }
 
 void MulticopterLandDetector::_update_params()
@@ -190,10 +195,73 @@ bool MulticopterLandDetector::_get_ground_contact_state()
 	_in_descend = _is_climb_rate_enabled()
 		      && (_vehicleLocalPositionSetpoint.vz >= land_speed_threshold);
 	bool hit_ground = _in_descend && !verticalMovement;
+	
+	bool dg_manual_land;//添加检测条件
+	if(_internal_state.main_state==commander_state_s::MAIN_STATE_AUTO_RTL||_internal_state.main_state==commander_state_s::MAIN_STATE_AUTO_LAND)
+		dg_manual_land=true;
+	else if(_control_mode.flag_control_altitude_enabled==true)
+		dg_manual_land=_manual.z<0.45f;
+	else 
+		dg_manual_land=_manual.z<0.5f;
 
 	// TODO: we need an accelerometer based check for vertical movement for flying without GPS
 	if ((_has_low_thrust() || hit_ground) && (!_horizontal_movement || !_has_position_lock())
-	    && (!verticalMovement || !_has_altitude_lock())) {
+	    && (!verticalMovement || !_has_altitude_lock())&&dg_manual_land) {
+		return true;
+	}
+
+	return false;
+}
+
+bool MulticopterLandDetector::_get_dg_ground_contact_state()
+{
+	// only trigger flight conditions if we are armed
+	if (!_arming.armed) {
+		return true;
+	}
+
+	// land speed threshold
+	float land_speed_threshold = 0.9f * math::max(_params.landSpeed, 0.1f);
+    
+	// Check if we are moving vertically - this might see a spike after arming due to
+	// throttle-up vibration. If accelerating fast the throttle thresholds will still give
+	// an accurate in-air indication.
+	bool verticalMovement;
+
+	if (hrt_elapsed_time(&_landed_time) < LAND_DETECTOR_LAND_PHASE_TIME_US) {
+
+		// Widen acceptance thresholds for landed state right after arming
+		// so that motor spool-up and other effects do not trigger false negatives.
+		verticalMovement = fabsf(_vehicleLocalPosition.vz) > _params.maxClimbRate  * 2.5f;
+
+	} else {
+
+		// Adjust maxClimbRate if land_speed is lower than 2x maxClimbrate
+		float maxClimbRate = ((land_speed_threshold * 0.5f) < _params.maxClimbRate) ? (0.5f * land_speed_threshold) :
+				     _params.maxClimbRate;			 
+		verticalMovement = fabsf(_vehicleLocalPosition.z_deriv) > maxClimbRate;
+	}
+
+	// Check if we are moving horizontally.
+	bool horizontalMovement = sqrtf(_vehicleLocalPosition.vx * _vehicleLocalPosition.vx
+					+ _vehicleLocalPosition.vy * _vehicleLocalPosition.vy) > _params.maxVelocity;
+
+	// if we have a valid velocity setpoint and the vehicle is demanded to go down but no vertical movement present,
+	// we then can assume that the vehicle hit ground
+	bool in_descend = _is_climb_rate_enabled()
+			  && (_vehicleLocalPositionSetpoint.vz >= land_speed_threshold);
+	bool hit_ground = in_descend && !verticalMovement;
+
+	bool dg_manual_land;//添加检测条件
+	if(_internal_state.main_state==commander_state_s::MAIN_STATE_AUTO_RTL||_internal_state.main_state==commander_state_s::MAIN_STATE_AUTO_LAND)
+		dg_manual_land=true;
+	else if(_control_mode.flag_control_altitude_enabled==true)
+		dg_manual_land=_manual.z<0.45f;
+	else 
+		dg_manual_land=_manual.z<0.5f;
+	// TODO: we need an accelerometer based check for vertical movement for flying without GPS
+	if ((_has_low_thrust() || hit_ground) && (!horizontalMovement || !_has_position_lock())
+	    && (!verticalMovement || !_has_altitude_lock())&&dg_manual_land) {
 		return true;
 	}
 
@@ -242,7 +310,7 @@ bool MulticopterLandDetector::_get_maybe_landed_state()
 		return (_min_trust_start > 0) && (hrt_elapsed_time(&_min_trust_start) > 8_s);
 	}
 
-	if (_ground_contact_hysteresis.get_state() && _has_minimal_thrust() && !rotating) {
+	if ((_ground_contact_hysteresis.get_state()||_dg_ground_contact_hysteresis.get_state()) && _has_minimal_thrust() && !rotating) {
 		// Ground contact, no thrust and no movement -> landed
 		return true;
 	}
@@ -252,11 +320,6 @@ bool MulticopterLandDetector::_get_maybe_landed_state()
 
 bool MulticopterLandDetector::_get_landed_state()
 {
-	// When not armed, consider to be landed
-	if (!_arming.armed) {
-		return true;
-	}
-
 	// reset the landed_time
 	if (!_maybe_landed_hysteresis.get_state()) {
 
@@ -266,6 +329,18 @@ bool MulticopterLandDetector::_get_landed_state()
 
 		_landed_time = hrt_absolute_time();
 
+	}
+	float dg_land_speed_threshold = 0.9f * math::max(_params.landSpeed, 0.1f);
+	float dgmaxClimbRate = ((dg_land_speed_threshold * 0.6f) < _params.maxClimbRate) ? (0.6f * dg_land_speed_threshold) :
+				     _params.maxClimbRate;
+    if(_maybe_landed_hysteresis.get_state())
+		_dg_maybe_land=true;
+	if(_dg_maybe_land)
+	{
+	    if((_control_mode.flag_control_climb_rate_enabled&&_vehicleLocalPositionSetpoint.vz >=0&&_vehicleLocalPosition.z_deriv<-dgmaxClimbRate)||_has_minimal_thrust())
+		    return true;
+	    else 
+		    _dg_maybe_land=false;
 	}
 
 	// if we have maybe_landed, the mc_pos_control goes into idle (thrust_sp = 0.0)

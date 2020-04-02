@@ -64,7 +64,7 @@ private:
 
 	static constexpr int TARGET_TIMEOUT_MS = 2500;
 	static constexpr int TARGET_ACCEPTANCE_RADIUS_M = 5;
-	static constexpr int INTERPOLATION_PNTS = 20;
+	static constexpr int INTERPOLATION_PNTS = 80;
 	static constexpr float FF_K = .25F;
 	static constexpr float OFFSET_M = 8;
 
@@ -136,7 +136,7 @@ private:
 	bool target_velocity_valid();
 	bool target_position_valid();
 	void reset_target_validity();
-	void update_position_sp(bool velocity_valid, bool position_valid, float yaw_rate);
+	void update_position_sp(bool velocity_valid, bool position_valid, float yaw_rate, bool track_p);
 	void update_target_motion();
 	void update_target_velocity();
 

@@ -56,6 +56,8 @@
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_local_position.h>
+#include <uORB/topics/manual_control_setpoint.h> //RC输入
+#include <uORB/topics/commander_state.h>//遥控飞行模式
 
 using namespace time_literals;
 
@@ -65,6 +67,7 @@ namespace land_detector
 class MulticopterLandDetector : public LandDetector
 {
 public:
+    bool  _dg_maybe_land{false};  //DG
 	MulticopterLandDetector();
 
 protected:
@@ -74,6 +77,7 @@ protected:
 
 	bool _get_landed_state() override;
 	bool _get_ground_contact_state() override;
+	bool _get_dg_ground_contact_state() override;                //DG
 	bool _get_maybe_landed_state() override;
 	bool _get_freefall_state() override;
 	bool _get_ground_effect_state() override;
@@ -89,7 +93,10 @@ private:
 
 	/** Time in us that ground contact condition have to hold before triggering contact ground */
 	static constexpr hrt_abstime GROUND_CONTACT_TRIGGER_TIME_US = 350_ms;
-
+	
+    //DG
+	static constexpr hrt_abstime DG_GROUND_CONTACT_TRIGGER_TIME_US = 350_ms;
+	
 	/** Time interval in us in which wider acceptance thresholds are used after landed. */
 	static constexpr hrt_abstime LAND_DETECTOR_LAND_PHASE_TIME_US = 2_s;
 
@@ -131,6 +138,8 @@ private:
 	int _sensor_bias_sub{ -1};
 	int _vehicle_control_mode_sub{ -1};
 	int _battery_sub{ -1};
+	int _manual_sub{-1};//RC输入
+	int _internal_state_sub{-1};//遥控飞行模式
 
 	vehicle_local_position_s				_vehicleLocalPosition {};
 	vehicle_local_position_setpoint_s	_vehicleLocalPositionSetpoint {};
@@ -139,6 +148,8 @@ private:
 	sensor_bias_s					_sensors {};
 	vehicle_control_mode_s				_control_mode {};
 	battery_status_s						_battery {};
+	manual_control_setpoint_s		_manual{};////////RC输入
+	commander_state_s              _internal_state = {};///////遥控飞行模式
 
 	hrt_abstime _min_trust_start{0};		///< timestamp when minimum trust was applied first
 	hrt_abstime _landed_time{0};

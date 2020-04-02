@@ -69,6 +69,12 @@ enum class State {
 	previous_infront, /**< Vehilce is behind previous waypoint.*/
 	none /**< Vehicle is in normal tracking mode from triplet previous to triplet target */
 };
+//wqk
+enum class _State_process {
+	_step0, /*首次进入auto模式*/
+	_step1, /*进入auto模式未曾收到航点数据 */
+	_step2 /*进入auto模式，收到航点数据，正常运行*/
+};
 
 class FlightTaskAuto : public FlightTask
 {
@@ -101,6 +107,7 @@ protected:
 	uORB::Subscription<home_position_s> *_sub_home_position{nullptr};
 
 	State _current_state{State::none};
+	_State_process _state_mechanism{_State_process::_step0};//wqk
 	float _target_acceptance_radius = 0.0f; /**< Acceptances radius of the target */
 	int _mission_gear = landing_gear_s::GEAR_KEEP;
 

@@ -100,6 +100,7 @@ void LandDetector::_cycle()
 		_landDetected.landed = true;
 		_landDetected.ground_contact = false;
 		_landDetected.maybe_landed = false;
+		_landDetected.dg_ground_contact = false;    //DG
 
 		_p_total_flight_time_high = param_find("LND_FLIGHT_T_HI");
 		_p_total_flight_time_low = param_find("LND_FLIGHT_T_LO");
@@ -123,6 +124,7 @@ void LandDetector::_cycle()
 	const bool freefallDetected = (_state == LandDetectionState::FREEFALL);
 	const bool maybe_landedDetected = (_state == LandDetectionState::MAYBE_LANDED);
 	const bool ground_contactDetected = (_state == LandDetectionState::GROUND_CONTACT);
+	const bool dg_ground_contactDetected = (_state == LandDetectionState::DG_GROUND_CONTACT);   //DG
 	const float alt_max = _get_max_altitude() > 0.0f ? _get_max_altitude() : INFINITY;
 
 	const bool in_ground_effect = _ground_effect_hysteresis.get_state();
@@ -136,6 +138,7 @@ void LandDetector::_cycle()
 	    (_landDetected.freefall != freefallDetected) ||
 	    (_landDetected.maybe_landed != maybe_landedDetected) ||
 	    (_landDetected.ground_contact != ground_contactDetected) ||
+		(_landDetected.dg_ground_contact != dg_ground_contactDetected) ||                        //DG
 	    (_landDetected.in_ground_effect != in_ground_effect) ||
 	    (fabsf(_landDetected.alt_max - alt_max) > FLT_EPSILON)) {
 
@@ -149,6 +152,7 @@ void LandDetector::_cycle()
 		_landDetected.freefall = freefallDetected;
 		_landDetected.maybe_landed = maybe_landedDetected;
 		_landDetected.ground_contact = ground_contactDetected;
+		_landDetected.dg_ground_contact = dg_ground_contactDetected;                              //DG
 		_landDetected.alt_max = alt_max;
 		_landDetected.in_ground_effect = in_ground_effect;
 
@@ -211,6 +215,7 @@ void LandDetector::_update_state()
 	_landed_hysteresis.set_state_and_update(_get_landed_state());
 	_maybe_landed_hysteresis.set_state_and_update(_get_maybe_landed_state());
 	_ground_contact_hysteresis.set_state_and_update(_get_ground_contact_state());
+	_dg_ground_contact_hysteresis.set_state_and_update(_get_dg_ground_contact_state());    //DG
 	_ground_effect_hysteresis.set_state_and_update(_get_ground_effect_state());
 
 	if (_freefall_hysteresis.get_state()) {
@@ -224,6 +229,9 @@ void LandDetector::_update_state()
 
 	} else if (_ground_contact_hysteresis.get_state()) {
 		_state = LandDetectionState::GROUND_CONTACT;
+
+	} else if (_dg_ground_contact_hysteresis.get_state()) {                                //DG
+		_state = LandDetectionState::DG_GROUND_CONTACT;
 
 	} else {
 		_state = LandDetectionState::FLYING;

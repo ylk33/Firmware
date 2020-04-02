@@ -51,6 +51,19 @@ mc_att_control start
 mc_pos_control start
 
 #
+# send_position follow_target publish  v2
+#
+#send_position start
+
+#
 # Start Multicopter Land Detector.
 #
 land_detector start multicopter
+
+#
+# follow receiver module      v5
+#
+rw_uart start
+
+
+

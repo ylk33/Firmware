@@ -63,7 +63,8 @@ public:
 		LANDED = 1,
 		FREEFALL = 2,
 		GROUND_CONTACT = 3,
-		MAYBE_LANDED = 4
+		MAYBE_LANDED = 4,
+		DG_GROUND_CONTACT = 5
 	};
 
 	LandDetector();
@@ -127,6 +128,9 @@ protected:
 	 */
 	virtual bool _get_ground_contact_state() { return false; }
 
+	//DG
+	virtual bool _get_dg_ground_contact_state() { return false; }
+	
 	/**
 	 * @return true if UAV is in free-fall state.
 	 */
@@ -162,6 +166,7 @@ protected:
 	systemlib::Hysteresis _maybe_landed_hysteresis{true};
 	systemlib::Hysteresis _ground_contact_hysteresis{true};
 	systemlib::Hysteresis _ground_effect_hysteresis{false};
+	systemlib::Hysteresis _dg_ground_contact_hysteresis{true};                 //DG
 
 	struct actuator_armed_s	_arming {};
 
